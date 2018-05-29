@@ -1,5 +1,14 @@
 # Anoncreds 设计
 
+> 译注 1：前后两天时间 （16hrs） 进行文档翻译。
+>  
+> 译注 2：Anoncreds 设计中需要注意:  
+> 1. 基本概念在 https://github.com/hyperledger/indy-node/blob/master/design/anoncreds.md 有更完整的定义和说明。  
+> 1. blob 大块云存储如何理解？  
+> 1. tails 的可撤销凭证实现原理是什么？  
+> 1. node 的交易中哪些交易与 anoncreds 有关？
+
+
 你能看到关于 Indy SDK Anoncreds 工作流的需求和设计，包括撤销。
 
 * [Anoncreds 参考资料](#anoncreds-references)
@@ -554,10 +563,10 @@ pub extern fn indy_prover_get_credentials_for_proof_req(command_handle: i32,
 
 /// 根据给定的证明请求创建一个证明。
 /// 或者是一个与可选的透露的属性相对应的凭证，或者是为由每一个属性提供的自证属性。（参见 indy_prover_get_credentials_for_pool_req）。
-/// (2018.5.25，translating here) A proof request may request multiple credentials from different schemas and different issuers.
-/// All required schemas, public keys and revocation registries must be provided.
-/// The proof request also contains nonce.
-/// The proof contains either proof or self-attested attribute value for each requested attribute.
+/// 一个验证请求可能会从不同的 schema 和 不同的发行人那里请求多个凭证。
+/// 必须提供全部的被请求的 schemas, 公钥, 撤销注册表。
+/// 验证请求同样包含 nonce。
+/// 验证的证明要么包含 proof，要么包含为每个被请求的属性的自证属性。
 ///
 /// #Params
 /// wallet_handle: wallet handler (created by open_wallet).
@@ -700,8 +709,8 @@ pub extern fn indy_prover_create_proof(command_handle: i32,
 ```
 
 ```Rust
-/// Verifies a proof (of multiple credential).
-/// All required schemas, public keys and revocation registries must be provided.
+/// 验证一个（多凭证的）证明。
+/// 需提供全部的 schemas, 公钥和撤销凭证。
 ///
 /// #Params
 /// wallet_handle: wallet handler (created by open_wallet).
@@ -801,7 +810,7 @@ pub extern fn indy_verifier_verify_proof(command_handle: i32,
 ```
 
 ```Rust
-/// Create revocation state for a credential in the particular time moment.
+/// 创建在指定时间撤销凭证的状态。
 ///
 /// #Params
 /// command_handle: command handle to map callback to user context
@@ -838,8 +847,7 @@ pub extern fn indy_create_revocation_state(command_handle: i32,
 ```
 
 ```Rust
-/// Create new revocation state for a credential based on existed state
-/// at the particular time moment (to reduce calculation time).
+/// 在指定时间为已存在状态的凭证创建新的撤销状态。
 ///
 /// #Params
 /// command_handle: command handle to map callback to user context
@@ -878,28 +886,32 @@ pub extern fn indy_update_revocation_state(command_handle: i32,
 ```
 
 
-### Blob Storage
+### 非结构化云存储 Blob Storage
 
-CL revocation schema introduces Revocation Tails entity used to hide information about revoked credential in public Revocation Registry. Tails
+> Definition - What does Blob Storage mean?
+Blob storage is a feature in Microsoft Azure that lets developers store unstructured data in Microsoft's cloud platform. This data can be accessed from anywhere in the world and can include audio, video and text. Blobs are grouped into "containers" that are tied to user accounts. Blobs can be manipulated with .NET code.
 
-* are static (once generated) array of BigIntegers that can be represented as binary blob or file
-* may require quite huge amount of data (up to 1GB per Revocation Registry);
-* are created and shared by Issuers;
-* are required (so must be available for download) for both Provers and Issuers;
-* can be cached and can be downloaded only once;
-* Some operation (incremental witness updates) can require reading only small part of blob file. It can be more efficient to store complete tails blob in the cloud and ask for small parts through network.
 
-As result the way how to access tails blobs can be very application specific. To address this SDK will provide the following:
+“CL 撤销格式”是被用来隐藏在公开撤销注册表中的被撤销凭证信息的“撤销 Tails”。tails
 
-* API for registering custom handler for blobs reading
-* API for registering custom handler for blobs writing
-* API for blob consistency validation
-* Default handlers implementation that will allow to read blobs from local file and write blobs to local file.
+* 是能被用二进制云存储或文件表示的大数整数的固态的（一旦被生成）数组。
+* 可能需要十分大量的数据（每个撤销注册表 1GB）。
+* 由发行者创建和分享。
+* 可以被验证者和发行者请求（必须能被下载）。
+* 只能被缓存和下载一次。
+* 一些操作（见证增量更新）需要读取云存储块文件中的一小部分。它可以对云中完成 tail 云存储文件和通过网络请求一小部分更加有效。
 
-Tails publishing and access workflow can be integrated with Indy Node in the following way:
+最终访问云块数据的方法因应用而异。为了符合这一点，SDK 将会提供：
 
-* Issuer generates tails and writes tails blob to local file (with default handler). Our API will also provide blob hash to him and generate URI based on configurable URI pattern.
-* Issuer uploads blob to some CDN with corresponded URI (out of SDK scope)
-* Issuer sends REVOC_REG_DEF transaction with and publishes tails URI and hash
-* Prover sends GET_REVOC_REG_DEF requests and receives tails URI and hash
-* Prover downloads published tails file and stores it locally (Out of SDK)
+* 云块数据读取的注册自定义处理程序的 API
+* 云块数据写入的注册自定义处理程序的 API
+* 云块数据一致性验证的 API
+* 默认的处理程序实现，允许从本地文件读取云块数据，并将云块数据写到本地文件中。
+
+用以下方式 Tails 发布和访问工作流可以被集成到 Indy Node：
+
+* 发行者生成 tails 向本地文件写入 tails 云存储（通过默认的操作）。我们的 API 将会提供云储存的哈希并生成基于可配置的 URI 模式的 URI。
+* 发行者上传云存储到符合 URI 的 CDN 上。
+* 发行者发送 REVOC_REG_DEF Tx 并将 tails URI 和哈希发布出去。
+* 验证者发送 GET_REVOC_REG_DEF 请求和接收 URI 和哈希。
+* 验证者下载被发布的的 tails 文件并在本地存储。
